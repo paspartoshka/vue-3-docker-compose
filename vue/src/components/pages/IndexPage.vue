@@ -1,15 +1,13 @@
 <template>
-  <div class="app">
+  <div v-if='!gameOver' class="app">
     <GameBoard />
     <SidePanel />
-
-    <div v-if="gameOver" class="overlay">
-      <div>
-        <div>Вы проиграли</div>
-        <button @click="() => restart()">Заново</button>
-      </div>
-    </div>
   </div>
+
+    <div v-else class="game-over">
+        <div>Вы проиграли</div>
+        <button class="game-over-button" @click="() => restart()">Заново</button>
+    </div>
 </template>
 
 <script>
@@ -43,27 +41,26 @@ export default {
   display: flex;
 }
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: #181818;
+.game-over {
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 25px;
 }
 
-.overlay button {
-  padding: 10px 34px;
-  background: #09121e;
-  border: 1px solid #22262b;
+.game-over-button {
+  border: 1px;
   border-radius: 5px;
-  color: #e8eaf0;
+  background: #579840;
+  font-size: 20px;
   cursor: pointer;
-  text-align: left;
-  font-size: 10px;
 }
 
-.overlay button:hover:not(:disabled) { background: #59646c}
+.game-over-button:hover {
+  background: #025a12
+}
 
 
 </style>
