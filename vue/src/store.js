@@ -16,6 +16,9 @@ const REMOVE_ENEMY = 'REMOVE_ENEMY'
 const MOVE_ENEMY = 'MOVE_ENEMY'
 const DAMAGE_ENEMY = 'DAMAGE_ENEMY'
 const SET_SELECTED_ENEMY = 'SET_SELECTED_ENEMY'
+const SET_GAME_OVER = 'SET_GAME_OVER'
+const SET_WAVE = 'SET_WAVE'
+const SET_SPAWN_QUEUE = 'SET_SPAWN_QUEUE'
 
 export default createStore({
     state: {
@@ -26,6 +29,9 @@ export default createStore({
         selectedSlot: null,
         enemies: {},
         selectedEnemy: null,
+        gameOver: false,
+        waveIndex: -1,
+        spawnQueue: [],
     },
 
     getters: {
@@ -38,8 +44,20 @@ export default createStore({
         selectedTower(state) {
             return state.towers[state.selectedSlot] || null
         },
-        selectedEnemyId(state){
+        selectedEnemyId(state) {
             return state.selectedEnemy
+        },
+        gameOver(state) {
+            return state.gameOver
+        },
+        waveIndex(state) {
+            return state.waveIndex
+        },
+        hasNextWave(state) {
+            return state.waveIndex < state.level.waves.length - 1
+        },
+        waveInProgress(state) {
+            return state.spawnQueue.some((g) => g.remaining > 0)
         },
     },
 
@@ -52,6 +70,9 @@ export default createStore({
             state.enemies = {}
             state.selectedSlot = null
             state.selectedEnemy = null
+            state.gameOver = false
+            state.waveIndex = -1
+            state.spawnQueue = []
             enemyId = 1
         },
 
@@ -97,9 +118,12 @@ export default createStore({
             if (state.selectedEnemy === id) state.selectedEnemy = null
         },
 
-        [MOVE_ENEMY](state, { id, x, y }) {
+        [MOVE_ENEMY](state, { id, x, y, pathIndex }) {
             if (!state.enemies[id]) return
-            state.enemies = { ...state.enemies, [id]: { ...state.enemies[id], x, y } }
+            state.enemies = {
+                ...state.enemies,
+                [id]: { ...state.enemies[id], x, y, pathIndex },
+            }
         },
 
         [DAMAGE_ENEMY](state, { id, amount }) {
@@ -119,6 +143,19 @@ export default createStore({
 
         [SET_SELECTED_ENEMY](state, id) {
             state.selectedEnemy = state.selectedEnemy === id ? null : id
+        },
+
+        [SET_GAME_OVER](state) {
+            state.gameOver = true
+        },
+
+        [SET_WAVE](state, { waveIndex, spawnQueue }) {
+            state.waveIndex = waveIndex
+            state.spawnQueue = spawnQueue
+        },
+
+        [SET_SPAWN_QUEUE](state, queue) {
+            state.spawnQueue = queue
         },
     },
 
@@ -162,9 +199,10 @@ export default createStore({
             const start = state.level.path[0]
             const id = `e${enemyId++}`
             commit('ADD_ENEMY', {
-                id, x: start.x + 20, y: start.y,
+                id, x: start.x, y: start.y,
                 hp: spawn.hp, maxHp: spawn.hp,
                 speed: spawn.speed, reward: spawn.reward,
+                color: spawn.color, pathIndex: 0,
             })
         },
 
@@ -174,8 +212,63 @@ export default createStore({
 
         selectEnemy({ commit }, id) { commit('SET_SELECTED_ENEMY', id) },
 
-        tick({ commit, state }) {
+        startWave({ commit, state }) {
+            const nextIndex = state.waveIndex + 1
+            if (nextIndex >= state.level.waves.length) return
+            const wave = state.level.waves[nextIndex]
+            const spawnQueue = wave.map((group) => ({
+                spawnIndex: group.spawnIndex,
+                interval: group.interval,
+                remaining: group.count,
+                lastSpawn: 0,
+            }))
+            commit('SET_WAVE', { waveIndex: nextIndex, spawnQueue })
+        },
+
+        tick({ commit, dispatch, state }) {
+            if (state.gameOver) return
+
             const now = Date.now()
+            const path = state.level.path
+
+            state.spawnQueue.forEach((group, groupIndex) => {
+                if (group.remaining <= 0) return
+                if (now - group.lastSpawn < group.interval) return
+                const spawn = state.level.spawns[group.spawnIndex]
+                dispatch('spawnEnemy', spawn)
+                const queue = state.spawnQueue.map((g, i) =>
+                    i === groupIndex ? { ...g, remaining: g.remaining - 1, lastSpawn: now } : g
+                )
+                commit('SET_SPAWN_QUEUE', queue)
+            })
+
+            Object.values(state.enemies).forEach((enemy) => {
+                let { x, y, pathIndex, speed } = enemy
+                let dist = speed
+                while (dist > 0) {
+                    const nextIndex = pathIndex + 1
+                    if (nextIndex >= path.length) {
+                        commit('SET_GAME_OVER')
+                        return
+                    }
+                    const to = path[nextIndex]
+                    const dx = to.x - x
+                    const dy = to.y - y
+                    const len = Math.sqrt(dx * dx + dy * dy)
+                    if (dist >= len) {
+                        x = to.x
+                        y = to.y
+                        pathIndex = nextIndex
+                        dist -= len
+                    } else {
+                        x = x + dx * (dist / len)
+                        y = y + dy * (dist / len)
+                        dist = 0
+                    }
+                }
+                commit('MOVE_ENEMY', { id: enemy.id, x, y, pathIndex })
+            })
+
             const enemies = Object.values(state.enemies)
             if (enemies.length === 0) return
             const slotMap = {}

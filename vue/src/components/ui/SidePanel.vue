@@ -2,7 +2,6 @@
   <div class="panel">
     <div class="row">
       <b>$ {{ gold }}</b>
-      <b>HP {{ lives }}</b>
     </div>
 
   <div>Выбор уровня</div>
@@ -40,10 +39,12 @@
       </template>
     </template>
 
-    <div>Спавн врагов</div>
+    <div>Волна {{ waveIndex + 1 }}/{{ level.waves.length }}</div>
     <button
-        v-for="spawn in level.spawns" :key="spawn.hp"
-        @click="() => $store.dispatch('spawnEnemy', spawn)">{{spawn.name}}</button>
+        :disabled="waveInProgress || !hasNextWave"
+        @click="() => $store.dispatch('startWave')">
+      {{ waveInProgress ? 'Идёт волна' : hasNextWave ? 'Следующая волна' : 'Волны кончились' }}
+    </button>
 
     <template v-if="selectedEnemy">
       <div class="stats">
@@ -75,6 +76,9 @@ export default {
     level() { return this.$store.state.level },
     selectedSlot() { return this.$store.state.selectedSlot },
     selectedTower() { return this.$store.getters.selectedTower },
+    waveIndex() { return this.$store.getters.waveIndex },
+    hasNextWave() { return this.$store.getters.hasNextWave },
+    waveInProgress() { return this.$store.getters.waveInProgress },
     selectedEnemy() {
       const id = this.$store.state.selectedEnemy
       return id ? this.$store.state.enemies[id] : null
