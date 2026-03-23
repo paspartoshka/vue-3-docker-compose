@@ -2,14 +2,13 @@
   <div class="panel">
     <div class="row">
       <b>$ {{ gold }}</b>
-      <b>HP {{ lives }}</b>
     </div>
 
   <div>Выбор уровня</div>
     <button
         v-for="lvl in LEVELS" :key="lvl.id"
         :class="{ active: level.id === lvl.id }"
-        @click="() => $store.dispatch('selectLevel', lvl)"> {{ lvl.number }} </button>
+        @click="() => selectLevel(lvl)"> {{ lvl.number }} </button>
 
     <template v-if="selectedSlot">
 
@@ -25,9 +24,9 @@
 
         <button
             :disabled="selectedTower.level >= selectedTowerCfg.levels.length || gold < upgradeCost"
-            @click="() => $store.dispatch('upgradeTower', selectedSlot)">Улучшить (-{{ upgradeCost }}$)</button>
+            @click="() => upgradeTower(selectedSlot)">Улучшить (-{{ upgradeCost }}$)</button>
 
-        <button @click="() => $store.dispatch('removeTower', selectedSlot)">Снести (+{{ selectedTowerCfg.refund }}$)</button>
+        <button @click="() => removeTower(selectedSlot)">Снести (+{{ selectedTowerCfg.refund }}$)</button>
       </template>
 
       <template v-else>
@@ -36,26 +35,29 @@
             v-for="(towerCfg, type) in TOWERS" :key="type"
             :disabled="gold < towerCfg.cost"
             :style="{ borderColor: towerCfg.color, color: towerCfg.color }"
-            @click="() => $store.dispatch('placeTower', type)">{{ towerCfg.name }}  {{ towerCfg.cost }}$</button>
+            @click="() => placeTower(type)">{{ towerCfg.name }}  {{ towerCfg.cost }}$</button>
       </template>
     </template>
 
-    <div>Спавн врагов</div>
+    <div>Волна {{ waveIndex + 1 }}/{{ level.waves.length }}</div>
     <button
-        v-for="spawn in level.spawns" :key="spawn.hp"
-        @click="() => $store.dispatch('spawnEnemy', spawn)">{{spawn.name}}</button>
+        :disabled="waveInProgress || !hasNextWave"
+        @click="() => startWave()">
+      {{ waveInProgress ? 'Идёт волна' : hasNextWave ? 'Следующая волна' : 'Волны кончились' }}
+    </button>
 
     <template v-if="selectedEnemy">
       <div class="stats">
         <span>HP: <b>{{ selectedEnemy.hp }}/{{ selectedEnemy.maxHp }}</b></span>
         <span>Скорость: <b>{{ selectedEnemy.speed }}</b></span>
       </div>
-      <button @click="() => $store.dispatch('removeEnemy', selectedEnemy.id)">Удалить</button>
+      <button @click="() => removeEnemy(selectedEnemy.id)">Удалить</button>
     </template>
   </div>
 </template>
 
 <script>
+import { mapGetters, mapActions} from 'vuex'
 import { LEVELS } from '@/levels'
 import { TOWERS } from '@/towers.js'
 
@@ -70,11 +72,16 @@ export default {
   },
 
   computed: {
+    ...mapGetters([
+        'selectedTower',
+        'waveIndex',
+        'hasNextWave',
+        'waveInProgress',
+    ]),
     gold() { return this.$store.state.gold },
     lives() { return this.$store.state.lives },
     level() { return this.$store.state.level },
     selectedSlot() { return this.$store.state.selectedSlot },
-    selectedTower() { return this.$store.getters.selectedTower },
     selectedEnemy() {
       const id = this.$store.state.selectedEnemy
       return id ? this.$store.state.enemies[id] : null
@@ -88,30 +95,17 @@ export default {
     },
   },
 
-  mounted() {
-    window.addEventListener('keydown', this.onKey)
-  },
-
-  beforeUnmount() {
-    window.removeEventListener('keydown', this.onKey)
-  },
-
   methods: {
-    onKey(e) {
-      const enemy = this.selectedEnemy
-      if (!enemy) return
-      const step = this.selectedEnemy.speed
-      const map = {
-        ArrowLeft:  { x: enemy.x - step, y: enemy.y },
-        ArrowRight: { x: enemy.x + step, y: enemy.y },
-        ArrowUp:    { x: enemy.x, y: enemy.y - step },
-        ArrowDown:  { x: enemy.x, y: enemy.y + step },
-      }
-      if (!map[e.key]) return
-      e.preventDefault()
-      this.$store.dispatch('moveEnemy', { id: enemy.id, ...map[e.key] })
-    },
-  },
+    ...mapActions([
+        'selectLevel',
+        'placeTower',
+        'removeTower',
+        'upgradeTower',
+        'startWave',
+        'removeEnemy',
+        'moveEnemy'
+    ])
+  }
 }
 </script>
 
